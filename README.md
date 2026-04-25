@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consola Operativa Parcona AI</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería para Gráficos Modernos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @media print { .no-print { display: none !important; } body { background: white; } }
+        .btn-active:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // TU URL DE GOOGLE SHEETS
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwMtsjME3iikDdQOY7NCZG_14KdCgmth7YktluEBZ_7HAtOrj-kAHDBw9KlMN_AQaBb/exec";
+
+        function App() {
+            const [stats, setStats] = useState({ disuasiones: 0, educacion: 0, infracciones: 0, alertas: 0 });
+            const [history, setHistory] = useState([]);
+            const [view, setView] = useState('operacion');
+            const [isSyncing, setIsSyncing] = useState(false);
+            
+            const chartRef = useRef(null);
+            const donutRef = useRef(null);
+            const chartInstance = useRef(null);
+            const donutInstance = useRef(null);
+
+            // Inicializar Gráficos
+            useEffect(() => {
+                if (view === 'reporte') {
+                    // Gráfico de Línea (Tendencia)
+                    const ctx = document.getElementById('lineChart');
+                    if (ctx) {
+                        if (chartInstance.current) chartInstance.current.destroy();
+                        chartInstance.current = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: ['6am', '9am', '12pm', '3pm', '6pm', '9pm'],
+                                datasets: [{
+                                    label: 'Actividad de Campo',
+                                    data: [2, 5, stats.disuasiones, stats.educacion, stats.infracciones, stats.alertas],
+                                    borderColor: '#4f46e5',
+                                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                }]
+                            },
+                            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                        });
+                    }
+
+                    // Gráfico de Dona (Distribución)
+                    const dtx = document.getElementById('donutChart');
+                    if (dtx) {
+                        if (donutInstance.current) donutInstance.current.destroy();
+                        donutInstance.current = new Chart(dtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Disuasión', 'Educación', 'Infracción', 'Alerta'],
+                                datasets: [{
+                                    data: [stats.disuasiones, stats.educacion, stats.infracciones, stats.alertas],
+                                    backgroundColor: ['#22c55e', '#3b82f6', '#f97316', '#ef4444'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: { plugins: { legend: { position: 'bottom' } }, cutout: '70%' }
+                        });
+                    }
+                }
+            }, [view, stats]);
+
+            const registrar = async (tipo, nombre) => {
+                const nuevaAccion = {
+                    accion: nombre,
+                    detalle: `Registro multi-monitor - Sector Av. Siete`,
+                    usuario: "Monitor_Campo_Parcona"
+                };
+
+                setStats(prev => ({ ...prev, [tipo]: prev[tipo] + 1 }));
+                const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setHistory(prev => [{ accion: nombre, hora }, ...prev].slice(0, 5));
+
+                if (WEB_APP_URL) {
+                    setIsSyncing(true);
+                    try {
+                        await fetch(WEB_APP_URL, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            body: JSON.stringify(nuevaAccion)
+                        });
+                    } catch (e) { console.error(e); }
+                    finally { setTimeout(() => setIsSyncing(false), 600); }
+                }
+            };
+
+            return (
+                <div className="min-h-screen pb-10">
+                    {/* Header Moderno */}
+                    <header className="bg-indigo-900 p-6 text-white no-print shadow-lg">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h1 className="text-xl font-black tracking-tight uppercase">Parcona Limpia 2026</h1>
+                                <p className="text-[10px] text-indigo-300 font-bold uppercase tracking-widest">Gestión Ambiental Municipal</p>
+                            </div>
+                            <div className={`h-8 w-8 rounded-xl flex items-center justify-center ${isSyncing ? 'bg-orange-500 animate-spin' : 'bg-green-500'}`}>
+                                <span className="text-xs">{isSyncing ? '⏳' : '✓'}</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Navegación */}
+                    <nav className="flex p-4 gap-2 bg-white border-b no-print">
+                        <button onClick={() => setView('operacion')} className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all ${view === 'operacion' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Consola</button>
+                        <button onClick={() => setView('reporte')} className={`flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-tighter transition-all ${view === 'reporte' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>Estadísticas</button>
+                    </nav>
+
+                    <main className="p-4 max-w-md mx-auto">
+                        {view === 'operacion' ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <BotonAccion label="Disuasión" icon="🛡️" count={stats.disuasiones} color="bg-green-50" textColor="text-green-700" onClick={() => registrar('disuasiones', 'Disuasión')} />
+                                    <BotonAccion label="Educación" icon="📢" count={stats.educacion} color="bg-blue-50" textColor="text-blue-700" onClick={() => registrar('educacion', 'Educación')} />
+                                    <BotonAccion label="Infracción" icon="🛺" count={stats.infracciones} color="bg-orange-50" textColor="text-orange-700" onClick={() => registrar('infracciones', 'Infracción')} />
+                                    <BotonAccion label="Pedir Camión" icon="🚛" count={stats.alertas} color="bg-red-50" textColor="text-red-700" onClick={() => registrar('alertas', 'Alerta Camión')} />
+                                </div>
+
+                                {/* Historial Reciente */}
+                                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                    <h3 className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                                        Actividad en Tiempo Real
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {history.length > 0 ? history.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between text-xs items-center p-2 bg-slate-50 rounded-lg">
+                                                <span className="font-bold text-slate-700">{item.accion}</span>
+                                                <span className="text-[10px] bg-white px-2 py-0.5 rounded text-slate-400 font-mono">{item.hora}</span>
+                                            </div>
+                                        )) : <p className="text-[10px] text-center text-slate-300 py-4 italic font-bold uppercase">Sin registros recientes</p>}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {/* Gráfico de Línea */}
+                                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Tendencia de Turno</h3>
+                                    <canvas id="lineChart" height="150"></canvas>
+                                </div>
+
+                                {/* Gráfico de Dona */}
+                                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest">Distribución de Acciones</h3>
+                                    <div className="h-48 flex justify-center">
+                                        <canvas id="donutChart"></canvas>
+                                    </div>
+                                </div>
+
+                                {/* Resumen Numérico */}
+                                <div className="bg-indigo-900 text-white p-6 rounded-3xl shadow-xl">
+                                    <h2 className="text-sm font-bold uppercase mb-4 border-b border-indigo-700 pb-2">Resumen Ejecutivo</h2>
+                                    <div className="space-y-3">
+                                        <ResumenItem label="Total Disuasiones" value={stats.disuasiones} />
+                                        <ResumenItem label="Ciudadanos Educados" value={stats.educacion} />
+                                        <ResumenItem label="Vehículos Registrados" value={stats.infracciones} />
+                                        <div className="pt-2 mt-2 border-t border-indigo-700 flex justify-between font-black text-lg">
+                                            <span>TOTAL IMPACTO</span>
+                                            <span>{stats.disuasiones + stats.educacion + stats.infracciones + stats.alertas}</span>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => window.print()} className="w-full mt-6 bg-white text-indigo-900 py-3 rounded-xl font-black uppercase text-[10px] no-print">Imprimir Reporte Oficial</button>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        function BotonAccion({ label, icon, count, color, textColor, onClick }) {
+            return (
+                <button onClick={onClick} className={`${color} p-5 rounded-3xl border border-slate-100 shadow-sm active:scale-95 transition-all text-center flex flex-col items-center btn-active`}>
+                    <span className="text-3xl mb-1">{icon}</span>
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">{label}</p>
+                    <p className={`text-xl font-black ${textColor}`}>{count}</p>
+                </button>
+            );
+        }
+
+        function ResumenItem({ label, value }) {
+            return (
+                <div className="flex justify-between items-center text-[11px] uppercase font-bold text-indigo-200">
+                    <span>{label}</span>
+                    <span className="text-white">{value}</span>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
